@@ -195,7 +195,7 @@ function cancelReservation($self)
 
         $fail = 0;
 
-        foreach ($_POST['itemID'] as $itemID) {
+        foreach ((array) $_POST['itemID'] as $itemID) {
             $delete = Reservation::deleteById($itemID);
 
             if (!$delete) {

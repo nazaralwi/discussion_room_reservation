@@ -151,21 +151,24 @@ class Reservation
         $stmt = $dbs->prepare($sql);
         $stmt->bind_param("sissssssiisss", $this->name, $this->memberId, $this->major, $this->whatsAppNumber, $this->reservedDate, $this->duration, $this->startTime, $this->endTime, $this->reservationDocumentId, $this->visitorNumber, $this->activity, $this->reservation_date, $this->reservationLastUpdate);
 
-        // Check if the reservation already exists before inserting
-        $existingReservation = $this->checkExistingReservation();
+        $dbs->begin_transaction();
 
-        if ($existingReservation) {
+        // Check if the reservation already exists before inserting
+        if ($this->checkExistingReservation()) {
             // A reservation already exists with the same date, start time, and end time
+            $dbs->rollback();
             return ["success" => false, "message" => "Error: This schedule is already reserved."];
         }
 
         // Proceed with the insertion if no existing reservation is found
         if ($stmt->execute()) {
+            $dbs->commit();
             $this->reservationId = $stmt->insert_id;
             return ["success" => true, "message" => "Reservation saved successfully."];
-        } else {
-            return ["success" => false, "message" => "Error: Failed to insert reservation."];
         }
+
+        $dbs->rollback();
+        return ["success" => false, "message" => "Error: Failed to insert reservation."];
     }
 
     public function updateReservation()
@@ -177,20 +180,25 @@ class Reservation
         $stmt = $dbs->prepare($sql);
         $stmt->bind_param("ssssssisii", $this->major, $this->whatsAppNumber, $this->reservedDate, $this->duration, $this->startTime, $this->endTime, $this->visitorNumber, $this->activity, $this->reservationDocumentId, $this->reservationId);
 
+        $dbs->begin_transaction();
+
         // Check if the reservation already exists before inserting
         $existingReservation = $this->checkExistingReservation();
 
         if ($existingReservation) {
             // A reservation already exists with the same date, start time, and end time
+            $dbs->rollback();
             return ["success" => false, "message" => "Error: This schedule is already reserved."];
         }
 
         // Proceed with the insertion if no existing reservation is found
         if ($stmt->execute()) {
+            $dbs->commit();
             return ["success" => true, "message" => "Reservation saved successfully."];
-        } else {
-            return ["success" => false, "message" => "Error: Failed to update reservation."];
         }
+
+        $dbs->rollback();
+        return ["success" => false, "message" => "Error: Failed to update reservation."];
     }
 
     public function retrieveReservationByMemberId($memberId)
@@ -274,7 +282,8 @@ class Reservation
             (start_time < ? AND end_time > ?)                 -- Case: New reservation's end_time is within existing
         )
         AND status != 'cancelled' AND status != 'completed'
-        AND reservation_id != ?";
+        AND reservation_id != ?
+        FOR UPDATE";
 
         $stmt = $dbs->prepare($sql);
         $currentReservationId = (int) $this->reservationId;
