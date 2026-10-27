@@ -13,12 +13,7 @@ use SLiMS\Plugins;
 // Discussion Room Reservation Base
 define('DRRB', __DIR__);
 
-if (!is_file(DRRB . DS . 'lib/vendor/autoload.php')) {
-    Plugins::getInstance()->registerMenu('membership', 'Reservasi Ruang Diskusi', DRRB . DS . 'app/missing_dependencies.php');
-    return;
-}
-
-require_once DRRB . DS . 'lib/vendor/autoload.php';
+require_once DRRB . DS . 'lib/php-calendar/Calendar.php';
 require_once DRRB . DS . 'app/helper/common.php';
 require_once DRRB . DS . 'app/models/Reservation.php';
 require_once DRRB . DS . 'app/models/ReservationSettings.php';

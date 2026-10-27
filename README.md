@@ -3,18 +3,19 @@
 ### Cara Install Plugin
 1. Klik Code > Download Zip.
 2. Ekstrak file .zip nya ke folder `plugins/` yang ada di folder utama SLiMS Anda. Pastikan nama folder atau _directory_-nya adalah `discussion_room_reservation` (tanpa _postfix_ `-master`).
-3. Jalankan perintah `composer install` pada folder atau _directory_ `plugins/discussion_room_reservation`. Langkah ini wajib karena folder `lib/vendor` tidak ikut di dalam file .zip. Jika dilewati, menu plugin hanya menampilkan pesan bahwa dependensi belum terpasang.
-4. Masuk modul **System** masuk menu **Plugins**. Cari plugin dengan nama **Reservasi Ruang Diskusi** kemudian aktifkan pluginnya.
+3. Masuk modul **System** masuk menu **Plugins**. Cari plugin dengan nama **Reservasi Ruang Diskusi** kemudian aktifkan pluginnya.
 
 Jika memperbarui plugin yang sudah terpasang, nonaktifkan lalu aktifkan kembali pluginnya agar migrasi _database_ terbaru dijalankan.
 
-Plugin ini sudah diuji pada SLiMS 9.6.1 dan 9.8.0, dan memerlukan PHP 8.1 atau lebih baru.
+Plugin ini tidak memerlukan Composer untuk digunakan, semua pustaka yang dibutuhkan sudah disertakan di folder `lib/`. Plugin sudah diuji pada SLiMS 9.6.1 dan 9.8.0, dan memerlukan PHP 8.1 atau lebih baru.
 
 ### Pengaturan
 Menu **Pengaturan** di halaman admin plugin digunakan untuk mengatur jam buka, jam tutup, interval slot, dan hari buka. Nilai awalnya adalah 08:00 sampai 16:00, interval 15 menit, Senin sampai Jumat.
 
 ### Menjalankan test
+Composer hanya diperlukan untuk menjalankan test:
 ```
+composer install
 php lib/vendor/bin/phpunit
 ```
 
