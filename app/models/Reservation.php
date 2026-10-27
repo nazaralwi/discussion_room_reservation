@@ -144,7 +144,7 @@ class Reservation
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         $stmt = $dbs->prepare($sql);
-        $stmt->bind_param("sissssssiisss", $this->name, $this->memberId, $this->major, $this->whatsAppNumber, $this->reservedDate, $this->duration, $this->startTime, $this->endTime, $this->reservationDocumentId, $this->visitorNumber, $this->activity, $this->reservation_date, $this->reservationLastUpdate);
+        $stmt->bind_param("ssssssssiisss", $this->name, $this->memberId, $this->major, $this->whatsAppNumber, $this->reservedDate, $this->duration, $this->startTime, $this->endTime, $this->reservationDocumentId, $this->visitorNumber, $this->activity, $this->reservation_date, $this->reservationLastUpdate);
 
         $dbs->begin_transaction();
 
@@ -202,7 +202,7 @@ class Reservation
 
         $sql = "SELECT * FROM room_reservations WHERE member_id = ?";
         $stmt = $dbs->prepare($sql);
-        $stmt->bind_param("i", $memberId);
+        $stmt->bind_param("s", $memberId);
         $stmt->execute();
         $result = $stmt->get_result();
 
