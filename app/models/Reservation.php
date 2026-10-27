@@ -187,7 +187,6 @@ class Reservation
 
         // Proceed with the insertion if no existing reservation is found
         if ($stmt->execute()) {
-            $this->reservationId = $stmt->insert_id;
             return ["success" => true, "message" => "Reservation saved successfully."];
         } else {
             return ["success" => false, "message" => "Error: Failed to update reservation."];
@@ -274,11 +273,13 @@ class Reservation
             (start_time < ? AND end_time > ?) OR              -- Case: New reservation's start_time is within existing
             (start_time < ? AND end_time > ?)                 -- Case: New reservation's end_time is within existing
         )
-        AND status != 'cancelled' AND status != 'completed'";
+        AND status != 'cancelled' AND status != 'completed'
+        AND reservation_id != ?";
 
         $stmt = $dbs->prepare($sql);
+        $currentReservationId = (int) $this->reservationId;
         $stmt->bind_param(
-            "sssssssss",
+            "sssssssssi",
             $this->reservedDate,
             $this->startTime,
             $this->endTime,                  // For overlapping case
@@ -287,7 +288,8 @@ class Reservation
             $this->startTime,
             $this->startTime,                // For new reservation's start_time within existing
             $this->endTime,
-            $this->endTime                     // For new reservation's end_time within existing
+            $this->endTime,                    // For new reservation's end_time within existing
+            $currentReservationId
         );
         $stmt->execute();
 

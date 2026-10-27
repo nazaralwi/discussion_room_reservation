@@ -1,9 +1,46 @@
 <?php
 use SLiMS\Filesystems\Storage;
 
+function guardAdminWrite($title)
+{
+    if (!utility::havePrivilege('membership', 'w')) {
+        utility::jsToastr($title, __('You are not authorized to view this section'), 'error');
+        exit();
+    }
+
+    if (!simbio_form_maker::isTokenValid()) {
+        utility::jsToastr($title, __('Invalid form submission token!'), 'error');
+        writeLog('staff', $_SESSION['uid'], 'system', 'Invalid form submission token, might be a CSRF attack from ' . $_SERVER['REMOTE_ADDR']);
+        exit();
+    }
+}
+
+function printGridCsrfScript($formName)
+{
+    $token = simbio_form_maker::genRandomToken();
+    simbio_form_maker::addTokenToPool($formName, $token);
+    ?>
+    <script>
+        (function () {
+            const form = document.querySelector('form[name="<?= $formName ?>"]');
+            if (form === null) return;
+            [['csrf_token', '<?= $token ?>'], ['form_name', '<?= $formName ?>']].forEach(([name, value]) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            });
+        })();
+    </script>
+    <?php
+}
+
 function reserveScheduleOnsite($self)
 {
     if (isset($_POST['reserve'])) {
+        guardAdminWrite('Reservasi onsite');
+
         $reservation = new Reservation();
 
         $memberId = $_POST['memberID'];
@@ -101,6 +138,8 @@ function updateReservation($self)
     if (isset($_POST['updateRecordID']) && isset($_POST['updateReservationData'])) {
         global $dbs;
 
+        guardAdminWrite('Reservasi onsite');
+
         $updateRecordID = $dbs->escape_string($_POST['updateRecordID']);
         $reservation = new Reservation();
 
@@ -152,6 +191,8 @@ function updateReservation($self)
 function cancelReservation($self)
 {
     if (isset($_POST['itemID']) && !empty($_POST['itemID']) && isset($_POST['itemAction'])) {
+        guardAdminWrite('Onsite Reservation');
+
         $fail = 0;
 
         foreach ($_POST['itemID'] as $itemID) {
@@ -173,9 +214,32 @@ function cancelReservation($self)
     }
 }
 
+function canMemberCancelReservation($reservationId, $memberId)
+{
+    $reservation = Reservation::getById((int) $reservationId);
+
+    if ($reservation === null) {
+        return false;
+    }
+
+    if ($reservation->status !== 'ongoing') {
+        return false;
+    }
+
+    return (string) $reservation->memberId === (string) $memberId;
+}
+
 function cancelReservationByMember($self)
 {
     if (isset($_POST['itemID'])) {
+        if (!canMemberCancelReservation($_POST['itemID'], $_SESSION['mid'] ?? null)) {
+            echo '<script type="text/javascript">';
+            echo 'alert("' . 'Anda tidak dapat membatalkan reservasi ini' . '");';
+            echo 'location.href = \'index.php?p=member&sec=discussion_room_reservation_tab\';';
+            echo '</script>';
+            exit;
+        }
+
         $delete = Reservation::deleteById($_POST['itemID']);
         $deleteDocument = deleteReservationDocument($_POST['itemID']); // Remove this if you wanna keep the reservation document
 

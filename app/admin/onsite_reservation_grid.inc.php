@@ -68,3 +68,5 @@ if ((isset($_GET['keywords']) and $_GET['keywords'])) {
 }
 
 echo $datagrid_result;
+
+printGridCsrfScript('reservationScheduleList');
