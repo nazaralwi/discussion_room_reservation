@@ -34,6 +34,10 @@ function formatWhatsAppNumberInto62Format($whatsAppNumber)
 
 function getMajorFromId($id)
 {
+    if (strlen((string) $id) < 5) {
+        return "S1 Teknik Informatika";
+    }
+
     $educationLevelCode = (int) ((string) $id)[2];
     $majorCode = ((string) $id)[3] . ((string) $id)[4];
 

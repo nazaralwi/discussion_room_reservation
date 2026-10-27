@@ -30,6 +30,28 @@ class Reservation
     public $inputDate;
     public $lastUpdate;
 
+    public static function fromRow(array $row)
+    {
+        $reservation = new Reservation();
+        $reservation->reservationId = $row['reservation_id'];
+        $reservation->reservation_date = $row['reservation_date'];
+        $reservation->name = $row['name'];
+        $reservation->memberId = $row['member_id'];
+        $reservation->major = $row['major'];
+        $reservation->whatsAppNumber = $row['whatsapp_number'];
+        $reservation->reservedDate = $row['reserved_date'];
+        $reservation->duration = $row['duration'];
+        $reservation->startTime = $row['start_time'];
+        $reservation->endTime = $row['end_time'];
+        $reservation->reservationDocumentId = $row['reservation_document_id'];
+        $reservation->visitorNumber = $row['visitor_number'];
+        $reservation->activity = $row['activity'];
+        $reservation->status = $row['status'];
+        $reservation->reservationLastUpdate = $row['last_update'];
+
+        return $reservation;
+    }
+
     public static function getById($reservationId)
     {
         global $dbs;
@@ -40,12 +62,9 @@ class Reservation
         $stmt->execute();
         $result = $stmt->get_result();
 
-        if ($result->num_rows > 0) {
-            $reservation = $result->fetch_object('Reservation');
-            return $reservation;
-        } else {
-            return null;
-        }
+        $row = $result->fetch_assoc();
+
+        return $row ? self::fromRow($row) : null;
     }
 
     public static function getAll()
@@ -98,30 +117,6 @@ class Reservation
         global $dbs;
 
         $sql = "SELECT reserved_date, start_time, end_time FROM room_reservations WHERE status != 'cancelled' AND status != 'completed'";
-        $result = $dbs->query($sql);
-
-        $schedule = [];
-
-        if ($result->num_rows > 0) {
-            while ($row = $result->fetch_assoc()) {
-                // return as mapped schedule instead of Reservation's object
-                $schedule[] = [
-                    'start_date' => $row['reserved_date'],
-                    'end_date' => $row['reserved_date'],
-                    'start_time' => $row['start_time'],
-                    'end_time' => $row['end_time'],
-                ];
-            }
-        }
-
-        return $schedule;
-    }
-
-    public static function getBookedSchedules1()
-    {
-        global $dbs;
-
-        $sql = "SELECT reserved_date, start_time, end_time FROM room_reservations";
         $result = $dbs->query($sql);
 
         $schedule = [];
@@ -205,31 +200,16 @@ class Reservation
     {
         global $dbs;
 
-        $sql = 'SELECT * FROM room_reservations WHERE member_id = ' . $memberId . ';';
-        $result = $dbs->query($sql);
+        $sql = "SELECT * FROM room_reservations WHERE member_id = ?";
+        $stmt = $dbs->prepare($sql);
+        $stmt->bind_param("i", $memberId);
+        $stmt->execute();
+        $result = $stmt->get_result();
 
         $reservations = [];
 
-        if ($result->num_rows > 0) {
-            while ($row = $result->fetch_assoc()) {
-                $reservation = new Reservation();
-                $reservation->reservationId = $row['reservation_id'];
-                $reservation->reservation_date = $row['reservation_date'];
-                $reservation->name = $row['name'];
-                $reservation->memberId = $row['member_id'];
-                $reservation->major = $row['major'];
-                $reservation->whatsAppNumber = $row['whatsapp_number'];
-                $reservation->reservedDate = $row['reserved_date'];
-                $reservation->duration = $row['duration'];
-                $reservation->startTime = $row['start_time'];
-                $reservation->endTime = $row['end_time'];
-                $reservation->reservationDocumentId = $row['reservation_document_id'];
-                $reservation->visitorNumber = $row['visitor_number'];
-                $reservation->activity = $row['activity'];
-                $reservation->status = $row['status'];
-                $reservation->reservationLastUpdate = $row['last_update'];
-                $reservations[] = $reservation;
-            }
+        while ($row = $result->fetch_assoc()) {
+            $reservations[] = self::fromRow($row);
         }
 
         return $reservations;
@@ -353,7 +333,7 @@ class Reservation
         if ($stmt->execute()) {
             $result = $stmt->get_result();
             $row = $result->fetch_assoc();
-            return $row['file_name']; // Return the file_name value    
+            return $row['file_name'] ?? null; // Return the file_name value    
         } else {
             return null; // Return null if execution fails
         }
