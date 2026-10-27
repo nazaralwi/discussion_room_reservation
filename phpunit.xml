@@ -3,7 +3,6 @@
     <testsuites>
         <testsuite name="plugin">
             <directory>tests</directory>
-            <exclude>tests/SchedulesTest.php</exclude>
         </testsuite>
     </testsuites>
 </phpunit>

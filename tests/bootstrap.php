@@ -1,4 +1,6 @@
 <?php
+date_default_timezone_set('Asia/Jakarta');
+
 define('DS', DIRECTORY_SEPARATOR);
 define('DRRB', dirname(__DIR__));
 
