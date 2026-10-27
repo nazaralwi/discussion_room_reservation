@@ -1,6 +1,34 @@
 <?php
 use SLiMS\Filesystems\Storage;
 
+function parseScheduleRange($timeRange)
+{
+    $times = explode(" - ", (string) $timeRange);
+
+    if (count($times) !== 2) {
+        return null;
+    }
+
+    foreach ($times as $time) {
+        if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/', $time)) {
+            return null;
+        }
+    }
+
+    if (strtotime($times[0]) >= strtotime($times[1])) {
+        return null;
+    }
+
+    return $times;
+}
+
+function isValidReservationDate($date)
+{
+    $parsed = DateTime::createFromFormat('Y-m-d', (string) $date);
+
+    return $parsed !== false && $parsed->format('Y-m-d') === $date;
+}
+
 function guardAdminWrite($title)
 {
     if (!utility::havePrivilege('membership', 'w')) {
@@ -51,8 +79,13 @@ function reserveScheduleOnsite($self)
         $reservation->reservedDate = $_POST['reservationDate'];
         $reservation->duration = $_POST['duration'];
 
-        $timeRange = $_POST['availableSchedule'];
-        $times = explode(" - ", $timeRange);
+        $times = parseScheduleRange($_POST['availableSchedule'] ?? '');
+
+        if ($times === null || !isValidReservationDate($_POST['reservationDate'] ?? '')) {
+            utility::jsToastr('Reservasi onsite', 'Tanggal atau jadwal reservasi tidak valid', 'error');
+            exit();
+        }
+
         $reservation->startTime = $times[0];
         $reservation->endTime = $times[1];
 
@@ -96,8 +129,16 @@ function reserveSchedule($self)
         $reservation->reservedDate = $_POST['reservationDate'];
         $reservation->duration = $_POST['duration'];
 
-        $timeRange = $_POST['availableSchedule'];
-        $times = explode(" - ", $timeRange);
+        $times = parseScheduleRange($_POST['availableSchedule'] ?? '');
+
+        if ($times === null || !isValidReservationDate($_POST['reservationDate'] ?? '')) {
+            echo '<script type="text/javascript">';
+            echo 'alert("' . 'Tanggal atau jadwal reservasi tidak valid' . '");';
+            echo 'location.href = \'index.php?p=member&sec=discussion_room_reservation_tab\';';
+            echo '</script>';
+            exit();
+        }
+
         $reservation->startTime = $times[0];
         $reservation->endTime = $times[1];
 
@@ -152,8 +193,13 @@ function updateReservation($self)
             $reservation->reservedDate = $_POST['reservationDate'];
             $reservation->duration = $_POST['duration'];
 
-            $timeRange = $_POST['availableSchedule'];
-            $times = explode(" - ", $timeRange);
+            $times = parseScheduleRange($_POST['availableSchedule'] ?? '');
+
+            if ($times === null || !isValidReservationDate($_POST['reservationDate'] ?? '')) {
+                utility::jsToastr('Reservasi onsite', 'Tanggal atau jadwal reservasi tidak valid', 'error');
+                exit();
+            }
+
             $reservation->startTime = $times[0];
             $reservation->endTime = $times[1];
 
