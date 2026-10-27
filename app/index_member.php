@@ -25,6 +25,7 @@
 use SLiMS\Url;
 use SLiMS\DB;
 use SLiMS\Json;
+use SLiMS\Auth\Validator;
 use SLiMS\Captcha\Factory as Captcha;
 use Volnix\CSRF\CSRF;
 
@@ -46,7 +47,16 @@ do_checkIP('opac-member');
 
 // Required flie
 require SIMBIO . 'simbio_DB/simbio_dbop.inc.php';
-require LIB . 'member_logon.inc.php';
+
+// create logon class instance
+$logon = Validator::use(
+    config(
+    'auth.methods.' . config('auth.sections.member'),
+    \SLiMS\Auth\Methods\Native::class
+    )
+);
+
+$logon->getHook();
 
 // Captcha initialize
 $captcha = Captcha::section('memberarea');
@@ -69,7 +79,7 @@ define('CANT_UPDATE_PASSWD', -3);
 // if member is logged out
 if (isset($_GET['logout']) && $_GET['logout'] == '1') {
     // write log
-    utility::writeLogs($dbs, 'member', $_SESSION['email'], 'Login', $_SESSION['member_name'] . ' Log Out from address ' . ip());
+    writeLog('member', $_SESSION['m_email'], 'Login', $_SESSION['m_name'] . ' Log Out from address ' . ip());
     // completely destroy session cookie
     simbio_security::destroySessionCookie(null, MEMBER_COOKIES_NAME, SWB, false);
     redirect()->withHeader([
@@ -104,13 +114,9 @@ if (isset($_POST['logMeIn']) && !$is_member_login) {
     // regenerate session ID to prevent session hijacking
     session_regenerate_id(true);
 
-    // create logon class instance
-    $logon = new member_logon($username, $password, $sysconf['auth']['member']['method']);
-    if ($sysconf['auth']['member']['method'] === 'LDAP') $ldap_configs = $sysconf['auth']['member'];
-
-    if ($logon->valid($dbs)) {
+    if ($logon->process('member')) {
         // write log
-        utility::writeLogs($dbs, 'member', $username, 'Login', sprintf(__('Login success for member %s from address %s'),$username,ip()));
+        writeLog('member', $username, 'Login', sprintf(__('Login success for member %s from address %s'),$username,ip()));
         if (isset($_GET['destination']) && Url::isValid($_GET['destination']) && Url::isSelf($_GET['destination'])) {
             redirect($_GET['destination']);
         } else {
@@ -119,11 +125,11 @@ if (isset($_POST['logMeIn']) && !$is_member_login) {
         exit();
     } else {
         // write log
-        utility::writeLogs($dbs, 'member', $username, 'Login', sprintf(__('Login FAILED for member %s from address %s'),$username,ip()));
+        writeLog('member', $username, 'Login', sprintf(__('Login FAILED for member %s from address %s'),$username,ip()));
         // message
         //simbio_security::destroySessionCookie($msg, MEMBER_COOKIES_NAME, SWB, false);
         CSRF::generateToken();
-        redirect()->withMessage('wrong_password', __('Login FAILED! Wrong Member ID or password!'))->to('?p=member');
+        redirect()->withMessage('wrong_password', $logon->getError())->to('?p=member');
     }
 }
 
@@ -289,6 +295,7 @@ if ($is_member_login) :
        */
     function changePassword()
     {
+        global $sysconf;
         // show the member information
         $_form = '<form id="memberChangePassword" method="post" action="index.php?p=member&sec=my_account">' . "\n";
         $_form .= '<table class="memberDetail table table-striped" cellpadding="5" cellspacing="0">' . "\n";
@@ -309,6 +316,10 @@ if ($is_member_login) :
         $_form .= '</tr>' . "\n";
         $_form .= '</table>' . "\n";
         $_form .= '</form>' . "\n";
+        if ($sysconf['password_policy_strong']) {
+            $_form .= simbio_security::validatePasswordFunctionJS();
+            $_form .= '<script type="text/javascript">comparePassword("#memberChangePassword", "input[name=newPass]", "input[name=newPass2]", '.$sysconf['password_policy_min_length'].');</script>';
+        }    
 
         return $_form;
     }
@@ -323,7 +334,12 @@ if ($is_member_login) :
        */
     function procChangePassword($str_curr_pass, $str_new_pass, $str_conf_new_pass)
     {
-        global $dbs;
+        global $dbs, $sysconf;
+        if ($sysconf['password_policy_strong'] && ($str_new_pass AND $str_conf_new_pass) 
+            && ($str_new_pass === $str_conf_new_pass) 
+            && !simbio_security::validatePassword($str_conf_new_pass, $sysconf['password_policy_min_length'])) {
+            return CANT_UPDATE_PASSWD;
+        } 
         // get hash from db
         $_str_pass_sql = sprintf('SELECT mpasswd FROM member
             WHERE member_id=\'%s\'', $dbs->escape_string(trim($_SESSION['mid'])));
@@ -393,7 +409,7 @@ if ($is_member_login) :
         $_loan_list->using_AJAX = false;
         // return the result
         $_result = $_loan_list->createDataGrid($dbs, $_table_spec, $num_recs_show);
-        $_result = '<div class="memberLoanListInfo my-3">' . $_loan_list->num_rows . ' ' . __('item(s) currently on loan') . ' | <a href="?p=download_current_loan" class="btn btn-sm btn-outline-primary"><i class="fa fa-download"></i>&nbsp;&nbsp;' . __('Download All Current Loan') . '</a></div>' . "\n" . $_result;
+        $_result = '<div class="memberLoanListInfo my-3">' . $_loan_list->num_rows . ' ' . __('item(s) currently on loan') . ' | <a href="?p=download_current_loan" class="btn btn-sm btn-outline-primary"><i class="fa fa-download"></i>&nbsp;&nbsp;' . __('Download All Current Loan') . '</a> <a href="?p=download_member_loan_report" class="btn btn-sm btn-outline-primary"><i class="fa fa-download"></i>&nbsp;&nbsp;' . __('Download All Loan Report') . '</a></div>' . "\n" . $_result;
         return $_result;
     }
 
@@ -518,7 +534,7 @@ if ($is_member_login) :
     // END: - Discussion Room Reservasion
 
     /*
-       * Function to show member collection baskets
+       * Function to show member collection basket
        *
        * @param       int         number of loan records to show
        * @return      string
@@ -547,9 +563,11 @@ if ($is_member_login) :
         $_loan_list->setSQLCriteria($_criteria);
         $_loan_list->column_width[0] = '5%';
         $_loan_list->modifyColumnContent(1, 'callback{titleLink}');
-        function titleLink($db, $data)
-        {
-            return '<a target="_blank" href="index.php?p=show_detail&id=' . $data[0] . '">' . $data[1] . '</a>';
+        if (!function_exists('titleLink')) {
+            function titleLink($db, $data)
+            {
+                return '<a target="_blank" href="index.php?p=show_detail&id=' . $data[0] . '">' . $data[1] . '</a>';
+            }
         }
         $_loan_list->modifyColumnContent(0, '<input type="checkbox" name="basket[]" class="basketItem" value="{column_value}" />');
 
@@ -604,13 +622,13 @@ if ($is_member_login) :
                  ->send();
 
             // write to system log
-            utility::writeLogs($dbs, 'member', isset($_SESSION['mid']) ? $_SESSION['mid'] : '0', 'membership', 'Reservation notification e-mail sent to ' . $_SESSION['m_email'], 'Reservation', 'Add');
+            writeLog('member', isset($_SESSION['mid']) ? $_SESSION['mid'] : '0', 'membership', 'Reservation notification e-mail sent to ' . $_SESSION['m_email'], 'Reservation', 'Add');
 
             // sent response
             return ['status' => 'SENT', 'message' => 'Reservation notification e-mail sent to ' . $_SESSION['m_email']];
         } catch (Exception $exception) {
             // write to system log
-            utility::writeLogs($dbs, 'member', isset($_SESSION['mid']) ? $_SESSION['mid'] : '0', 'membership', 'FAILED to send reservation e-mail to ' . $_SESSION['m_email'] . ' (' . $mail->ErrorInfo . ')');
+            writeLog('member', isset($_SESSION['mid']) ? $_SESSION['mid'] : '0', 'membership', 'FAILED to send reservation e-mail to ' . $_SESSION['m_email'] . ' (' . $mail->ErrorInfo . ')');
 
             return ['status' => 'ERROR', 'message' => "Message could not be sent. Mailer Error: {$mail->ErrorInfo}"];
         }
@@ -695,8 +713,28 @@ if ($is_member_login) :
 
     function _getItemReserve($dbs, $biblio_id)
     {
-        $sql = "SELECT item_code FROM item WHERE biblio_id='%s' ORDER BY RAND() ASC LIMIT 1";
-        $query = $dbs->query(sprintf($sql, $biblio_id));
+        // Use a round-robin selection to distribute reservations across available items.
+        // Approach: count available items, count existing reservations for this biblio,
+        // then pick the item at offset (reserve_count % total_available).
+        $biblio_id = (int)$biblio_id;
+
+        // count available items
+        $sql_count = "SELECT COUNT(item_code) FROM item WHERE biblio_id=%d AND (item_status_id IS NULL OR item_status_id = '' OR item_status_id = '0')";
+        $q_count = $dbs->query(sprintf($sql_count, $biblio_id));
+        $cdata = $q_count->fetch_row();
+        $total = (int)($cdata[0] ?? 0);
+        if ($total === 0) return null;
+
+        // count existing reservations for this biblio
+        $sql_res = "SELECT COUNT(reserve_id) FROM reserve WHERE biblio_id=%d";
+        $q_res = $dbs->query(sprintf($sql_res, $biblio_id));
+        $rdata = $q_res->fetch_row();
+        $reserve_count = (int)($rdata[0] ?? 0);
+
+        $offset = $reserve_count % $total;
+
+        $sql = "SELECT item_code FROM item WHERE biblio_id=%d AND (item_status_id IS NULL OR item_status_id = '' OR item_status_id = '0') ORDER BY item_code ASC LIMIT 1 OFFSET %d";
+        $query = $dbs->query(sprintf($sql, $biblio_id, $offset));
         $data = $query->fetch_row();
         return $data[0] ?? null;
     }
@@ -718,7 +756,7 @@ if ($is_member_login) :
     }
 
     // if there is change password request
-    if (isset($_POST['changePass']) && $sysconf['auth']['member']['method'] == 'native') {
+    if (isset($_POST['changePass']) && config('auth.sections.member') == 'native') {
         $change_pass = procChangePassword($_POST['currPass'], $_POST['newPass'], $_POST['newPass2']);
         if ($change_pass === true) {
             $info = '<span style="font-size: 120%; font-weight: bold; color: #28a745;">' . __('Your password have been changed successfully.') . '</span>';
@@ -758,9 +796,39 @@ if ($is_member_login) :
 
     }
 
+    $section = isset($_GET['sec']) ? trim($_GET['sec']) : 'current_loan';
+
+    // print digital member card
+    if ($section === 'membercard') :
+        include SB.'admin'.DS.'admin_template'.DS.'printed_settings.inc.php';
+        // check for custom template settings
+        $custom_settings = SB.'admin'.DS.$sysconf['admin_template']['dir'].DS.$sysconf['template']['theme'].DS.'printed_settings.inc.php';
+        if (file_exists($custom_settings)) {
+            include $custom_settings;
+        }
+        loadPrintSettings($dbs, 'membercard');
+
+        $card_conf = $sysconf['print']['membercard'];
+        $card_template = $card_conf['template'];
+        $card_path = SWB.FLS.DS.'membercard'.DS.$card_template.DS;
+        $card_logo = $card_path.IMG.DS.$card_conf['logo'];
+        $card_stamp = $card_path.IMG.DS.$card_conf['stamp_file'];
+        $card_signature = $card_path.IMG.DS.$card_conf['signature_file'];
+        $size = 2;
+
+        include UPLOAD . DS . 'membercard' . DS . 'individual-membercard.php';
+        exit();
+    endif;
     ?>
 
     <div class="d-flex">
+        <div style="width: 16rem;" class="bg-grey-light p-4" id="member_sidebar">
+            <div class="p-4">
+                <img src="<?= $member_image_url ?>" alt="member photo" class="rounded shadow">
+            </div>
+            <a href="index.php?p=member&sec=membercard" class="btn btn-primary btn-block" target="_blank"><i class="fas fa-address-card mr-2"></i><?php echo __('View Library Card'); ?></a>
+            <a href="index.php?p=member&logout=1" class="btn btn-danger btn-block"><i class="fas fa-sign-out-alt mr-2"></i><?php echo __('LOGOUT'); ?></a>
+        </div>
         <div class="flex-grow-1 p-4" id="member_content">
             <div class="text-sm text-grey-dark">
                 <?php
@@ -777,7 +845,7 @@ if ($is_member_login) :
                     <i class="far fa-user mr-2 text-green"></i><?php echo $_SESSION['m_member_type']; ?>
                 <?php endif; ?>
             </div>
-            <h1 class="mb-2">Hi, <?php echo $_SESSION['m_name']; ?></h1>
+            <h1 class="mb-2">Hi, <?php echo $_SESSION['m_name']; ?> <a href="index.php?p=member&sec=membercard" title="View Library Card" class="btn btn-primary" target="_blank"><i class="fas fa-address-card"></i></a></h1>
             <p id="info" class="w-75 mb-4">
                 <?php echo $info; ?>
             </p>
@@ -813,7 +881,7 @@ if ($is_member_login) :
                             'link' => 'index.php?p=member&sec=my_account'
                         ]
                     ];
-                    $section = isset($_GET['sec']) ? trim($_GET['sec']) : 'current_loan';
+                    
                     foreach ($tabs_menus as $km => $kv) {
                         $active = $section === $km ? 'active' : '';
                         $m = '<li class="nav-item">';
@@ -864,7 +932,7 @@ if ($is_member_login) :
                             echo '</div>';
                             echo showMemberDetail();
                             // change password only form NATIVE authentication, not for others such as LDAP
-                            if ($sysconf['auth']['member']['method'] == 'native') {
+                            if (config('auth.sections.member') == 'native') {
                                 echo '<div class="tagline">';
                                 echo '<div class="memberInfoHead mt-8">' . __('Change Password') . '</div>' . "\n";
                                 echo '</div>';
@@ -995,7 +1063,6 @@ if ($is_member_login) :
     </script>
 <?php else: ?>
     <div>
-        <div class="alert alert-info">Telah tersedia menu bebas pustaka dalam area anggota</div>
         <div class="tagline"><?php echo __('Library Member Login'); ?></div>
         <div class="loginInfo">
             <?php 
