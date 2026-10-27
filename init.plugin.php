@@ -14,6 +14,7 @@ define('DRRB', __DIR__);
 require_once DRRB . DS . 'lib/vendor/autoload.php';
 require_once DRRB . DS . 'app/helper/common.php';
 require_once DRRB . DS . 'app/models/Reservation.php';
+require_once DRRB . DS . 'app/models/ReservationSettings.php';
 
 use SLiMS\Plugins;
 

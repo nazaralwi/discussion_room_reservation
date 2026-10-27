@@ -26,9 +26,17 @@ foreach ($reservationEvents as $event) {
     );
 }
 
+$settings = ReservationSettings::get();
+
+if (!in_array(6, $settings['open_days'], true)) {
+    $calendar->hideSaturdays();
+}
+
+if (!in_array(0, $settings['open_days'], true)) {
+    $calendar->hideSundays();
+}
+
 $calendar
-    ->hideSaturdays()
-    ->hideSundays()
-    ->setTimeFormat('08:00', '15:59', 15)
+    ->setTimeFormat($settings['open_time'], decrementEndTimeByOneMinute($settings['close_time']), $settings['slot_step'])
     ->useWeekView()
     ->addEvents($events);

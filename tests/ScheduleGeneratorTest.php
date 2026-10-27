@@ -90,4 +90,48 @@ class ScheduleGeneratorTest extends TestCase
         $this->assertSame('08:00 - 16:00', $result[0]);
         $this->assertSame('08:00 - 15:30', $result[1]);
     }
+
+    public function testCustomHoursAndStepChangeTheSlots()
+    {
+        $settings = ['open_time' => '09:00', 'close_time' => '12:00', 'slot_step' => 30, 'open_days' => [1, 2, 3, 4, 5]];
+
+        $result = populateSchedule('2026-11-02', 60, [], $this->now('2026-11-01 12:00'), $settings);
+
+        $this->assertSame(['09:00 - 10:00', '09:30 - 10:30', '10:00 - 11:00', '10:30 - 11:30', '11:00 - 12:00'], $result);
+    }
+
+    public function testSaturdayIsOpenWhenConfigured()
+    {
+        $settings = ['open_time' => '08:00', 'close_time' => '16:00', 'slot_step' => 15, 'open_days' => [6]];
+
+        $this->assertNotSame([], populateSchedule('2026-11-07', 60, [], $this->now('2026-11-01 12:00'), $settings));
+        $this->assertSame([], populateSchedule('2026-11-02', 60, [], $this->now('2026-11-01 12:00'), $settings));
+    }
+
+    public function testTodayRoundsUpToConfiguredStep()
+    {
+        $settings = ['open_time' => '08:00', 'close_time' => '16:00', 'slot_step' => 30, 'open_days' => [1, 2, 3, 4, 5]];
+
+        $result = populateSchedule('2026-11-02', 60, [], $this->now('2026-11-02 10:07'), $settings);
+
+        $this->assertSame('10:30 - 11:30', $result[0]);
+    }
+
+    public function testLongDurationOptionsFollowOpeningHours()
+    {
+        $defaults = ReservationSettings::defaults();
+
+        $this->assertSame(range(480, 150, 30), longDurationOptions($defaults));
+        $this->assertSame(range(240, 150, 30), longDurationOptions(['open_time' => '09:00', 'close_time' => '13:00'] + $defaults));
+        $this->assertSame([], longDurationOptions(['open_time' => '09:00', 'close_time' => '11:00'] + $defaults));
+    }
+
+    public function testOpeningHoursCheck()
+    {
+        $this->assertTrue(isWithinOpeningHours('2026-11-02', ['08:00', '16:00']));
+        $this->assertTrue(isWithinOpeningHours('2026-11-02', ['09:00:00', '10:00:00']));
+        $this->assertFalse(isWithinOpeningHours('2026-11-02', ['07:45', '08:45']));
+        $this->assertFalse(isWithinOpeningHours('2026-11-02', ['15:30', '16:30']));
+        $this->assertFalse(isWithinOpeningHours('2026-11-07', ['09:00', '10:00']));
+    }
 }

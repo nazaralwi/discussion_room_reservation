@@ -1,40 +1,27 @@
 <?php
 
-define('START_TIME', '08:00');
-define('END_TIME', '16:00');
-
-function generateAvailableSchedules($startDate, $durationInMinutes, $bookedSchedules, $now = null)
+function generateAvailableSchedules($startDate, $durationInMinutes, $bookedSchedules, $now = null, $settings = null)
 {
+    $settings = $settings ?? ReservationSettings::get();
+    $step = $settings['slot_step'];
+
     $currentTime = $now ?? time(); // Current date and time 2023-12-26 13:45
 
     // Set the start date to the current hour if it's in the past
     if ($startDate < $currentTime) {
-        $currentMinute = date('i', $currentTime); // Get the current minute
+        $totalMinutes = (int) date('G', $currentTime) * 60 + (int) date('i', $currentTime);
+        $nextSlot = (intdiv($totalMinutes, $step) + 1) * $step;
 
-        $hour = date('H', $currentTime);
-        $min = 0;
-
-        if ($currentMinute >= 0 && $currentMinute < 15) {
-            $min = 15;
-        } else if ($currentMinute >= 15 && $currentMinute < 30) {
-            $min = 30;
-        } else if ($currentMinute >= 30 && $currentMinute < 45) {
-            $min = 45;
-        } else if ($currentMinute >= 45 && $currentMinute <= 59) {
-            $hour = date('H', strtotime('+1 hour', $currentTime));
-            $min = 0;
-        }
-
-        $startDate = strtotime(date('Y-m-d H:i', mktime($hour, $min, 0, date('m', $currentTime), date('d', $currentTime), date('Y', $currentTime))));
+        $startDate = mktime(intdiv($nextSlot, 60), $nextSlot % 60, 0, date('m', $currentTime), date('d', $currentTime), date('Y', $currentTime));
     }
 
     // Check if the provided start date falls on a weekend (Saturday or Sunday)
-    $dayOfWeek = date('w', $startDate);
-    if ($dayOfWeek == 0 || $dayOfWeek == 6) {
+    $dayOfWeek = (int) date('w', $startDate);
+    if (!in_array($dayOfWeek, $settings['open_days'], true)) {
         return []; // Return an empty array for weekends
     }
 
-    $endDate = strtotime(date('Y-m-d', $startDate) . ' ' . END_TIME); // End date for the given day
+    $endDate = strtotime(date('Y-m-d', $startDate) . ' ' . $settings['close_time']); // End date for the given day
 
     $currentTime = $startDate;
     $availableSchedules = [];
@@ -65,9 +52,9 @@ function generateAvailableSchedules($startDate, $durationInMinutes, $bookedSched
         }
 
         // Move to the next time slot (increment by 30 minutes)
-        $currentTime = strtotime('+15 minutes', $currentTime);
+        $currentTime = strtotime('+' . $step . ' minutes', $currentTime);
         // If the current time exceeds the end time of the day, exit the loop
-        if ($currentTime >= strtotime(date('Y-m-d', $startDate + 86400) . ' ' . START_TIME)) {
+        if ($currentTime >= strtotime(date('Y-m-d', $startDate + 86400) . ' ' . $settings['open_time'])) {
             break;
         }
     }
@@ -75,14 +62,14 @@ function generateAvailableSchedules($startDate, $durationInMinutes, $bookedSched
     return $availableSchedules;
 }
 
-function generateLongestAvailableSchedules($startDate, $durationOptions, $bookedSchedules, $now = null)
+function generateLongestAvailableSchedules($startDate, $durationOptions, $bookedSchedules, $now = null, $settings = null)
 {
     $availableSchedules = [];
 
     rsort($durationOptions); // Sort durations in descending order
 
     foreach ($durationOptions as $duration) {
-        $available = generateAvailableSchedules($startDate, $duration, $bookedSchedules, $now);
+        $available = generateAvailableSchedules($startDate, $duration, $bookedSchedules, $now, $settings);
         if (!empty($available)) {
             $availableSchedules[] = $available;
         }
@@ -105,18 +92,39 @@ function generateLongestAvailableSchedules($startDate, $durationOptions, $booked
     return $timeSlots;
 }
 
-function populateSchedule($startDateParam, $durationInMinutes, $bookedSchedules = [], $now = null)
+function populateSchedule($startDateParam, $durationInMinutes, $bookedSchedules = [], $now = null, $settings = null)
 {
-    $startDate = strtotime($startDateParam . ' ' . START_TIME); // Provide the desired date here
+    $settings = $settings ?? ReservationSettings::get();
+    $startDate = strtotime($startDateParam . ' ' . $settings['open_time']); // Provide the desired date here
 
     // Check if the provided start date is not in the past for today's schedule before generating schedules
-    if ($startDate >= strtotime('today ' . START_TIME, $now ?? time())) {
+    if ($startDate >= strtotime('today ' . $settings['open_time'], $now ?? time())) {
         if (is_array($durationInMinutes)) {
-            return generateLongestAvailableSchedules($startDate, $durationInMinutes, $bookedSchedules, $now);
+            return generateLongestAvailableSchedules($startDate, $durationInMinutes, $bookedSchedules, $now, $settings);
         } else {
-            return generateAvailableSchedules($startDate, $durationInMinutes, $bookedSchedules, $now);
+            return generateAvailableSchedules($startDate, $durationInMinutes, $bookedSchedules, $now, $settings);
         }
     } else {
         return ['Jadwal tidak tersedia']; // Return an array with an unavailable message if it's in the past
     }
+}
+
+function longDurationOptions($settings = null)
+{
+    $settings = $settings ?? ReservationSettings::get();
+    $longest = intdiv((int) ReservationSettings::openMinutes($settings), 30) * 30;
+
+    return $longest >= 150 ? range($longest, 150, 30) : [];
+}
+
+function isWithinOpeningHours($date, array $times, $settings = null)
+{
+    $settings = $settings ?? ReservationSettings::get();
+
+    if (!in_array((int) date('w', strtotime($date)), $settings['open_days'], true)) {
+        return false;
+    }
+
+    return strtotime($times[0]) >= strtotime($settings['open_time'])
+        && strtotime($times[1]) <= strtotime($settings['close_time']);
 }

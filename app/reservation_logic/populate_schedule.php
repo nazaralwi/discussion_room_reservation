@@ -15,7 +15,7 @@ if (isset($_POST['selectedDate'])) {
         '60' => populateSchedule($selectedDate, 60, $bookedSchedules),
         '90' => populateSchedule($selectedDate, 90, $bookedSchedules),
         '120' => populateSchedule($selectedDate, 120, $bookedSchedules),
-        '>120' => populateSchedule($selectedDate, range(480, 150, 30), $bookedSchedules),
+        '>120' => populateSchedule($selectedDate, longDurationOptions(), $bookedSchedules),
     ];
     echo json_encode($schedules);
 } else {
