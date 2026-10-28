@@ -8,14 +8,15 @@
  * Author URI: https://nazaralwi.com
  */
 
+use SLiMS\Plugins;
+
 // Discussion Room Reservation Base
 define('DRRB', __DIR__);
 
-require_once DRRB . DS . 'lib/vendor/autoload.php';
+require_once DRRB . DS . 'lib/php-calendar/Calendar.php';
 require_once DRRB . DS . 'app/helper/common.php';
 require_once DRRB . DS . 'app/models/Reservation.php';
-
-use SLiMS\Plugins;
+require_once DRRB . DS . 'app/models/ReservationSettings.php';
 
 // Get plugin instance
 $plugin = Plugins::getInstance();

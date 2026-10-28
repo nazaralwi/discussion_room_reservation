@@ -30,6 +30,7 @@ updateStatusForExpiredReservations();
 updateReservation(getCurrentUrl(['reservationScheduleList' => 1]));
 reserveScheduleOnsite(getCurrentUrl(['reservationScheduleList' => 1]));
 cancelReservation(getCurrentUrl(['reservationScheduleList' => 1]));
+saveReservationSettings(getCurrentUrl(['settings' => 1]));
 ?>
 
 <div class="menuBox">
@@ -46,6 +47,7 @@ cancelReservation(getCurrentUrl(['reservationScheduleList' => 1]));
                 <a href="<?= getCurrentUrl(['reservationScheduleHistoryList' => 1]) ?>" class="btn btn-primary">Daftar
                     Riwayat Reservasi</a>
                 <a href="<?= getCurrentUrl(['onsiteReservation' => 1]) ?>" class="btn btn-success">Reservasi Onsite</a>
+                <a href="<?= getCurrentUrl(['settings' => 1]) ?>" class="btn btn-secondary">Pengaturan</a>
             </div>
         </div>
     </div>
@@ -53,6 +55,10 @@ cancelReservation(getCurrentUrl(['reservationScheduleList' => 1]));
 
 <?php
 switch (true) {
+    case isset($_GET['settings']):
+        include DRRB . DS . 'app/admin/settings_form.inc.php';
+        break;
+
     case isset($_GET['onsiteReservation']):
         include DRRB . DS . 'app/admin/onsite_reservation_form.inc.php';
         break;

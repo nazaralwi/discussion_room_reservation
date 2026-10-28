@@ -1,6 +1,6 @@
 <?php
 
-require_once DRRB . DS . 'app/reservation_logic/populate_schedule.php';
+require_once DRRB . DS . 'app/reservation_logic/schedule_generator.php';
 use PHPUnit\Framework\TestCase;
 
 class SchedulesTest extends TestCase

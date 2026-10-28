@@ -1,4 +1,4 @@
 .idea
 .vscode
 lib/vendor
-composer.lock
+.phpunit.result.cache

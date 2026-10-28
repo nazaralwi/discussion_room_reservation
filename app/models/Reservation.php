@@ -30,6 +30,28 @@ class Reservation
     public $inputDate;
     public $lastUpdate;
 
+    public static function fromRow(array $row)
+    {
+        $reservation = new Reservation();
+        $reservation->reservationId = $row['reservation_id'];
+        $reservation->reservation_date = $row['reservation_date'];
+        $reservation->name = $row['name'];
+        $reservation->memberId = $row['member_id'];
+        $reservation->major = $row['major'];
+        $reservation->whatsAppNumber = $row['whatsapp_number'];
+        $reservation->reservedDate = $row['reserved_date'];
+        $reservation->duration = $row['duration'];
+        $reservation->startTime = $row['start_time'];
+        $reservation->endTime = $row['end_time'];
+        $reservation->reservationDocumentId = $row['reservation_document_id'];
+        $reservation->visitorNumber = $row['visitor_number'];
+        $reservation->activity = $row['activity'];
+        $reservation->status = $row['status'];
+        $reservation->reservationLastUpdate = $row['last_update'];
+
+        return $reservation;
+    }
+
     public static function getById($reservationId)
     {
         global $dbs;
@@ -40,12 +62,9 @@ class Reservation
         $stmt->execute();
         $result = $stmt->get_result();
 
-        if ($result->num_rows > 0) {
-            $reservation = $result->fetch_object('Reservation');
-            return $reservation;
-        } else {
-            return null;
-        }
+        $row = $result->fetch_assoc();
+
+        return $row ? self::fromRow($row) : null;
     }
 
     public static function getAll()
@@ -117,30 +136,6 @@ class Reservation
         return $schedule;
     }
 
-    public static function getBookedSchedules1()
-    {
-        global $dbs;
-
-        $sql = "SELECT reserved_date, start_time, end_time FROM room_reservations";
-        $result = $dbs->query($sql);
-
-        $schedule = [];
-
-        if ($result->num_rows > 0) {
-            while ($row = $result->fetch_assoc()) {
-                // return as mapped schedule instead of Reservation's object
-                $schedule[] = [
-                    'start_date' => $row['reserved_date'],
-                    'end_date' => $row['reserved_date'],
-                    'start_time' => $row['start_time'],
-                    'end_time' => $row['end_time'],
-                ];
-            }
-        }
-
-        return $schedule;
-    }
-
     public function save()
     {
         global $dbs;
@@ -149,23 +144,26 @@ class Reservation
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         $stmt = $dbs->prepare($sql);
-        $stmt->bind_param("sissssssiisss", $this->name, $this->memberId, $this->major, $this->whatsAppNumber, $this->reservedDate, $this->duration, $this->startTime, $this->endTime, $this->reservationDocumentId, $this->visitorNumber, $this->activity, $this->reservation_date, $this->reservationLastUpdate);
+        $stmt->bind_param("ssssssssiisss", $this->name, $this->memberId, $this->major, $this->whatsAppNumber, $this->reservedDate, $this->duration, $this->startTime, $this->endTime, $this->reservationDocumentId, $this->visitorNumber, $this->activity, $this->reservation_date, $this->reservationLastUpdate);
+
+        $dbs->begin_transaction();
 
         // Check if the reservation already exists before inserting
-        $existingReservation = $this->checkExistingReservation();
-
-        if ($existingReservation) {
+        if ($this->checkExistingReservation()) {
             // A reservation already exists with the same date, start time, and end time
+            $dbs->rollback();
             return ["success" => false, "message" => "Error: This schedule is already reserved."];
         }
 
         // Proceed with the insertion if no existing reservation is found
         if ($stmt->execute()) {
+            $dbs->commit();
             $this->reservationId = $stmt->insert_id;
             return ["success" => true, "message" => "Reservation saved successfully."];
-        } else {
-            return ["success" => false, "message" => "Error: Failed to insert reservation."];
         }
+
+        $dbs->rollback();
+        return ["success" => false, "message" => "Error: Failed to insert reservation."];
     }
 
     public function updateReservation()
@@ -177,52 +175,41 @@ class Reservation
         $stmt = $dbs->prepare($sql);
         $stmt->bind_param("ssssssisii", $this->major, $this->whatsAppNumber, $this->reservedDate, $this->duration, $this->startTime, $this->endTime, $this->visitorNumber, $this->activity, $this->reservationDocumentId, $this->reservationId);
 
+        $dbs->begin_transaction();
+
         // Check if the reservation already exists before inserting
         $existingReservation = $this->checkExistingReservation();
 
         if ($existingReservation) {
             // A reservation already exists with the same date, start time, and end time
+            $dbs->rollback();
             return ["success" => false, "message" => "Error: This schedule is already reserved."];
         }
 
         // Proceed with the insertion if no existing reservation is found
         if ($stmt->execute()) {
-            $this->reservationId = $stmt->insert_id;
+            $dbs->commit();
             return ["success" => true, "message" => "Reservation saved successfully."];
-        } else {
-            return ["success" => false, "message" => "Error: Failed to update reservation."];
         }
+
+        $dbs->rollback();
+        return ["success" => false, "message" => "Error: Failed to update reservation."];
     }
 
     public function retrieveReservationByMemberId($memberId)
     {
         global $dbs;
 
-        $sql = 'SELECT * FROM room_reservations WHERE member_id = ' . $memberId . ';';
-        $result = $dbs->query($sql);
+        $sql = "SELECT * FROM room_reservations WHERE member_id = ?";
+        $stmt = $dbs->prepare($sql);
+        $stmt->bind_param("s", $memberId);
+        $stmt->execute();
+        $result = $stmt->get_result();
 
         $reservations = [];
 
-        if ($result->num_rows > 0) {
-            while ($row = $result->fetch_assoc()) {
-                $reservation = new Reservation();
-                $reservation->reservationId = $row['reservation_id'];
-                $reservation->reservation_date = $row['reservation_date'];
-                $reservation->name = $row['name'];
-                $reservation->memberId = $row['member_id'];
-                $reservation->major = $row['major'];
-                $reservation->whatsAppNumber = $row['whatsapp_number'];
-                $reservation->reservedDate = $row['reserved_date'];
-                $reservation->duration = $row['duration'];
-                $reservation->startTime = $row['start_time'];
-                $reservation->endTime = $row['end_time'];
-                $reservation->reservationDocumentId = $row['reservation_document_id'];
-                $reservation->visitorNumber = $row['visitor_number'];
-                $reservation->activity = $row['activity'];
-                $reservation->status = $row['status'];
-                $reservation->reservationLastUpdate = $row['last_update'];
-                $reservations[] = $reservation;
-            }
+        while ($row = $result->fetch_assoc()) {
+            $reservations[] = self::fromRow($row);
         }
 
         return $reservations;
@@ -274,11 +261,14 @@ class Reservation
             (start_time < ? AND end_time > ?) OR              -- Case: New reservation's start_time is within existing
             (start_time < ? AND end_time > ?)                 -- Case: New reservation's end_time is within existing
         )
-        AND status != 'cancelled' AND status != 'completed'";
+        AND status != 'cancelled' AND status != 'completed'
+        AND reservation_id != ?
+        FOR UPDATE";
 
         $stmt = $dbs->prepare($sql);
+        $currentReservationId = (int) $this->reservationId;
         $stmt->bind_param(
-            "sssssssss",
+            "sssssssssi",
             $this->reservedDate,
             $this->startTime,
             $this->endTime,                  // For overlapping case
@@ -287,7 +277,8 @@ class Reservation
             $this->startTime,
             $this->startTime,                // For new reservation's start_time within existing
             $this->endTime,
-            $this->endTime                     // For new reservation's end_time within existing
+            $this->endTime,                    // For new reservation's end_time within existing
+            $currentReservationId
         );
         $stmt->execute();
 
@@ -342,7 +333,7 @@ class Reservation
         if ($stmt->execute()) {
             $result = $stmt->get_result();
             $row = $result->fetch_assoc();
-            return $row['file_name']; // Return the file_name value    
+            return $row['file_name'] ?? null; // Return the file_name value    
         } else {
             return null; // Return null if execution fails
         }

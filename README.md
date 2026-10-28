@@ -3,8 +3,21 @@
 ### Cara Install Plugin
 1. Klik Code > Download Zip.
 2. Ekstrak file .zip nya ke folder `plugins/` yang ada di folder utama SLiMS Anda. Pastikan nama folder atau _directory_-nya adalah `discussion_room_reservation` (tanpa _postfix_ `-master`).
-3. Jalankan perintah `composer install` pada folder atau _directory_ `plugins/discussion_room_reservation`.
-4. Masuk modul **System** masuk menu **Plugins**. Cari plugin dengan nama **Reservasi Ruang Diskusi** kemudian aktifkan pluginnya.
+3. Masuk modul **System** masuk menu **Plugins**. Cari plugin dengan nama **Reservasi Ruang Diskusi** kemudian aktifkan pluginnya.
+
+Jika memperbarui plugin yang sudah terpasang, nonaktifkan lalu aktifkan kembali pluginnya agar migrasi _database_ terbaru dijalankan.
+
+Plugin ini tidak memerlukan Composer untuk digunakan, semua pustaka yang dibutuhkan sudah disertakan di folder `lib/`. Plugin sudah diuji pada SLiMS 9.6.1 dan 9.8.0, dan memerlukan PHP 8.1 atau lebih baru.
+
+### Pengaturan
+Menu **Pengaturan** di halaman admin plugin digunakan untuk mengatur jam buka, jam tutup, interval slot, dan hari buka. Nilai awalnya adalah 08:00 sampai 16:00, interval 15 menit, Senin sampai Jumat.
+
+### Menjalankan test
+Composer hanya diperlukan untuk menjalankan test:
+```
+composer install
+php lib/vendor/bin/phpunit
+```
 
 ### File structure
 ![File Structure](docs/file_structure.png)
@@ -14,10 +27,12 @@ Setelah plugin diaktifkan, menu reservasi dapat dilihat di modul **Membership** 
 ![Admin Area](docs/admin_area.png)
 
 ### Member Area
-Sesuaikan kode `index_member.php` dengan kode yang ada di file `lib/contents/member.inc.php`.
-Seperti yang tertera pada dokumentasi SLiMS: [Membuat plugin modifikasi halaman pada OPAC](https://slims.web.id/docs/development-guide/Plugin/Membuat-plugin-modifikasi-halaman-pada-OPAC)
+Halaman member pada SLiMS diganti dengan salinan yang sudah memuat fitur reservasi, karena SLiMS belum menyediakan _hook_ untuk menambah menu pada halaman member. Plugin memilih salinan yang sesuai dengan versi SLiMS secara otomatis:
 
-Kode-kode yang berhubungan dengan fitur reservasi ruang diskusi pada `index_member.php` diapit oleh komentar:
+- `app/member_page/legacy.php`: salinan `lib/contents/member.inc.php` SLiMS 9.6.1, untuk SLiMS 9.6 ke bawah.
+- `app/member_page/current.php`: salinan `lib/contents/member.inc.php` SLiMS 9.8.0, untuk SLiMS 9.7 ke atas.
+
+Kode-kode yang berhubungan dengan fitur reservasi ruang diskusi diapit oleh komentar:
 ```
 // MARK: - Discussion Room Reservasion
 {kode}

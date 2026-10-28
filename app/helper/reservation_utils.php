@@ -1,30 +1,111 @@
 <?php
 use SLiMS\Filesystems\Storage;
 
+require_once DRRB . DS . 'app/reservation_logic/schedule_generator.php';
+
+function parseScheduleRange($timeRange)
+{
+    $times = explode(" - ", (string) $timeRange);
+
+    if (count($times) !== 2) {
+        return null;
+    }
+
+    foreach ($times as $time) {
+        if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/', $time)) {
+            return null;
+        }
+    }
+
+    if (strtotime($times[0]) >= strtotime($times[1])) {
+        return null;
+    }
+
+    return $times;
+}
+
+function isValidReservationDate($date)
+{
+    $parsed = DateTime::createFromFormat('Y-m-d', (string) $date);
+
+    return $parsed !== false && $parsed->format('Y-m-d') === $date;
+}
+
+function fillReservationFromInput(Reservation $reservation, array $input)
+{
+    $times = parseScheduleRange($input['availableSchedule'] ?? '');
+    $date = $input['reservationDate'] ?? '';
+
+    if ($times === null || !isValidReservationDate($date) || !isWithinOpeningHours($date, $times)) {
+        return false;
+    }
+
+    $reservation->major = $input['major'];
+    $reservation->whatsAppNumber = formatWhatsAppNumberInto62Format($input['whatsAppNumber']);
+    $reservation->reservedDate = $date;
+    $reservation->duration = $input['duration'];
+    $reservation->startTime = $times[0];
+    $reservation->endTime = $times[1];
+    $reservation->visitorNumber = $input['visitorNumber'];
+    $reservation->activity = $input['activity'];
+
+    $timestamp = date('Y-m-d H:i:s');
+    $reservation->reservation_date = $timestamp;
+    $reservation->reservationLastUpdate = $timestamp;
+
+    return true;
+}
+
+function guardAdminWrite($title)
+{
+    if (!utility::havePrivilege('membership', 'w')) {
+        utility::jsToastr($title, __('You are not authorized to view this section'), 'error');
+        exit();
+    }
+
+    if (!simbio_form_maker::isTokenValid()) {
+        utility::jsToastr($title, __('Invalid form submission token!'), 'error');
+        writeLog('staff', $_SESSION['uid'], 'system', 'Invalid form submission token, might be a CSRF attack from ' . $_SERVER['REMOTE_ADDR']);
+        exit();
+    }
+}
+
+function printGridCsrfScript($formName)
+{
+    $token = simbio_form_maker::genRandomToken();
+    simbio_form_maker::addTokenToPool($formName, $token);
+    ?>
+    <script>
+        (function () {
+            const form = document.querySelector('form[name="<?= $formName ?>"]');
+            if (form === null) return;
+            [['csrf_token', '<?= $token ?>'], ['form_name', '<?= $formName ?>']].forEach(([name, value]) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            });
+        })();
+    </script>
+    <?php
+}
+
 function reserveScheduleOnsite($self)
 {
     if (isset($_POST['reserve'])) {
+        guardAdminWrite('Reservasi onsite');
+
         $reservation = new Reservation();
 
         $memberId = $_POST['memberID'];
         $reservation->name = $_POST['name'];
         $reservation->memberId = $memberId;
-        $reservation->major = $_POST['major'];
-        $reservation->whatsAppNumber = formatWhatsAppNumberInto62Format($_POST['whatsAppNumber']);
-        $reservation->reservedDate = $_POST['reservationDate'];
-        $reservation->duration = $_POST['duration'];
 
-        $timeRange = $_POST['availableSchedule'];
-        $times = explode(" - ", $timeRange);
-        $reservation->startTime = $times[0];
-        $reservation->endTime = $times[1];
-
-        $reservation->visitorNumber = $_POST['visitorNumber'];
-        $reservation->activity = $_POST['activity'];
-
-        $timestamp = date('Y-m-d H:i:s');
-        $reservation->reservation_date = $timestamp;
-        $reservation->reservationLastUpdate = $timestamp;
+        if (!fillReservationFromInput($reservation, $_POST)) {
+            utility::jsToastr('Reservasi onsite', 'Tanggal atau jadwal reservasi tidak valid', 'error');
+            exit();
+        }
 
         $isFileUploaded = uploadFile($memberId);
         $reservation->reservationDocumentId = $isFileUploaded['insert_id'];
@@ -54,22 +135,14 @@ function reserveSchedule($self)
         $memberId = $_SESSION['mid'];
         $reservation->name = $_SESSION['m_name'];
         $reservation->memberId = $memberId;
-        $reservation->major = $_POST['major'];
-        $reservation->whatsAppNumber = formatWhatsAppNumberInto62Format($_POST['whatsAppNumber']);
-        $reservation->reservedDate = $_POST['reservationDate'];
-        $reservation->duration = $_POST['duration'];
 
-        $timeRange = $_POST['availableSchedule'];
-        $times = explode(" - ", $timeRange);
-        $reservation->startTime = $times[0];
-        $reservation->endTime = $times[1];
-
-        $reservation->visitorNumber = $_POST['visitorNumber'];
-        $reservation->activity = $_POST['activity'];
-
-        $timestamp = date('Y-m-d H:i:s');
-        $reservation->reservation_date = $timestamp;
-        $reservation->reservationLastUpdate = $timestamp;
+        if (!fillReservationFromInput($reservation, $_POST)) {
+            echo '<script type="text/javascript">';
+            echo 'alert("' . 'Tanggal atau jadwal reservasi tidak valid' . '");';
+            echo 'location.href = \'index.php?p=member&sec=discussion_room_reservation_tab\';';
+            echo '</script>';
+            exit();
+        }
 
         $isFileUploaded = uploadFile($memberId);
         $reservation->reservationDocumentId = $isFileUploaded['insert_id'];
@@ -101,6 +174,8 @@ function updateReservation($self)
     if (isset($_POST['updateRecordID']) && isset($_POST['updateReservationData'])) {
         global $dbs;
 
+        guardAdminWrite('Reservasi onsite');
+
         $updateRecordID = $dbs->escape_string($_POST['updateRecordID']);
         $reservation = new Reservation();
 
@@ -108,22 +183,11 @@ function updateReservation($self)
 
         if ($reservation) {
             $reservation->reservationId = $updateRecordID;
-            $reservation->major = $_POST['major'];
-            $reservation->whatsAppNumber = formatWhatsAppNumberInto62Format($_POST['whatsAppNumber']);
-            $reservation->reservedDate = $_POST['reservationDate'];
-            $reservation->duration = $_POST['duration'];
 
-            $timeRange = $_POST['availableSchedule'];
-            $times = explode(" - ", $timeRange);
-            $reservation->startTime = $times[0];
-            $reservation->endTime = $times[1];
-
-            $reservation->visitorNumber = $_POST['visitorNumber'];
-            $reservation->activity = $_POST['activity'];
-
-            $timestamp = date('Y-m-d H:i:s');
-            $reservation->reservation_date = $timestamp;
-            $reservation->reservationLastUpdate = $timestamp;
+            if (!fillReservationFromInput($reservation, $_POST)) {
+                utility::jsToastr('Reservasi onsite', 'Tanggal atau jadwal reservasi tidak valid', 'error');
+                exit();
+            }
 
             $isFileUploaded = uploadFile($_POST['memberId']);
             $reservation->reservationDocumentId = $isFileUploaded['insert_id'];
@@ -149,12 +213,37 @@ function updateReservation($self)
     }
 }
 
+function saveReservationSettings($self)
+{
+    if (isset($_POST['saveSettings'])) {
+        guardAdminWrite('Pengaturan reservasi');
+
+        $checked = ReservationSettings::sanitize($_POST);
+
+        if ($checked['errors'] !== []) {
+            utility::jsToastr('Pengaturan reservasi', implode('. ', $checked['errors']), 'error');
+            exit();
+        }
+
+        if (ReservationSettings::save($checked['settings'])) {
+            utility::jsToastr('Pengaturan reservasi', 'Pengaturan berhasil disimpan', 'success');
+            echo '<script>parent.$("#mainContent").simbioAJAX("' . $self . '")</script>';
+            exit();
+        }
+
+        utility::jsToastr('Pengaturan reservasi', 'Gagal menyimpan pengaturan', 'error');
+        exit();
+    }
+}
+
 function cancelReservation($self)
 {
     if (isset($_POST['itemID']) && !empty($_POST['itemID']) && isset($_POST['itemAction'])) {
+        guardAdminWrite('Onsite Reservation');
+
         $fail = 0;
 
-        foreach ($_POST['itemID'] as $itemID) {
+        foreach ((array) $_POST['itemID'] as $itemID) {
             $delete = Reservation::deleteById($itemID);
 
             if (!$delete) {
@@ -173,9 +262,32 @@ function cancelReservation($self)
     }
 }
 
+function canMemberCancelReservation($reservationId, $memberId)
+{
+    $reservation = Reservation::getById((int) $reservationId);
+
+    if ($reservation === null) {
+        return false;
+    }
+
+    if ($reservation->status !== 'ongoing') {
+        return false;
+    }
+
+    return (string) $reservation->memberId === (string) $memberId;
+}
+
 function cancelReservationByMember($self)
 {
     if (isset($_POST['itemID'])) {
+        if (!canMemberCancelReservation($_POST['itemID'], $_SESSION['mid'] ?? null)) {
+            echo '<script type="text/javascript">';
+            echo 'alert("' . 'Anda tidak dapat membatalkan reservasi ini' . '");';
+            echo 'location.href = \'index.php?p=member&sec=discussion_room_reservation_tab\';';
+            echo '</script>';
+            exit;
+        }
+
         $delete = Reservation::deleteById($_POST['itemID']);
         $deleteDocument = deleteReservationDocument($_POST['itemID']); // Remove this if you wanna keep the reservation document
 

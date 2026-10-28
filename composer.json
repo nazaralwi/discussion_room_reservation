@@ -10,8 +10,7 @@
         }
     ],
     "require": {
-        "php": ">=7.4",
-        "benhall14/php-calendar": "^1.4"
+        "php": ">=8.1"
     },
     "autoload": {
         "psr-4": {

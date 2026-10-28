@@ -1,0 +1,8 @@
+<?php
+date_default_timezone_set('Asia/Jakarta');
+
+define('DS', DIRECTORY_SEPARATOR);
+define('DRRB', dirname(__DIR__));
+
+require_once DRRB . DS . 'lib/vendor/autoload.php';
+require_once DRRB . DS . 'app/models/ReservationSettings.php';
